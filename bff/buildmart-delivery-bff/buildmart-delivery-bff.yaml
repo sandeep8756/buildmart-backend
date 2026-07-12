@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-delivery-bff
+  namespace: buildmart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-delivery-bff
+  template:
+    metadata:
+      labels:
+        app: buildmart-delivery-bff
+    spec:
+      containers:
+        - name: buildmart-delivery-bff
+          image: buildmart-delivery-bff:latest
+          ports:
+            - containerPort: 8103
+          env:
+            - name: ip_port
+              value: buildmart-delivery:8003
+          livenessProbe:
+            httpGet:
+              path: /buildmart-delivery-bff/health
+              port: 8103

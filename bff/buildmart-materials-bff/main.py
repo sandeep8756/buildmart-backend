@@ -6,16 +6,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 import utils.logging_cfg
-from application.router import router as api_router
+from application.api.v1 import v1
 from middleware import Middle
 from utils.common_api import common_v1
 from utils.exceptions import Error
 
-app = FastAPI(title="BuildMart BFF", version="1.0.0")
+app = FastAPI(title="BuildMart Materials BFF", version="1.0.0")
 origins = ["*"]
 
-app.add_middleware(Middle)
-app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -23,14 +21,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
+app.add_middleware(Middle)
 
 
 @app.get("/")
 async def health_check():
     return {
-        "service": "buildmart-bff",
-        "message": "M&P – Buy Materials. Book Workers. Build Faster.",
-        "core_materials": os.environ.get("ip_port_materials", "localhost:8001"),
+        "service": "buildmart-materials-bff",
+        "core": os.environ.get("ip_port", "localhost:8001"),
     }
 
 
@@ -39,5 +38,5 @@ async def exception_handler(request: Request, exc: Error):
     return JSONResponse(status_code=exc.status_code, content={"error": exc.error})
 
 
-app.include_router(api_router, prefix="/buildmart-bff")
-app.include_router(common_v1, prefix="/buildmart-bff/common")
+app.include_router(v1, prefix="/buildmart-materials-bff")
+app.include_router(common_v1, prefix="/buildmart-materials-bff/common")

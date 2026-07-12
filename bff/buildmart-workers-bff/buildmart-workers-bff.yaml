@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-workers-bff
+  namespace: buildmart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-workers-bff
+  template:
+    metadata:
+      labels:
+        app: buildmart-workers-bff
+    spec:
+      containers:
+        - name: buildmart-workers-bff
+          image: buildmart-workers-bff:latest
+          ports:
+            - containerPort: 8102
+          env:
+            - name: ip_port
+              value: buildmart-workers:8002
+          livenessProbe:
+            httpGet:
+              path: /buildmart-workers-bff/health
+              port: 8102

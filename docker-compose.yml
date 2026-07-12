@@ -28,19 +28,41 @@ services:
     networks:
       - buildmart-net
 
-  buildmart-bff:
+  buildmart-materials-bff:
     build:
       context: ./bff
-      dockerfile: buildmart-bff/Dockerfile
+      dockerfile: buildmart-materials-bff/Dockerfile
     ports:
-      - "8084:8084"
+      - "8101:8101"
     environment:
-      ip_port_materials: buildmart-materials:8001
-      ip_port_workers: buildmart-workers:8002
-      ip_port_delivery: buildmart-delivery:8003
+      ip_port: buildmart-materials:8001
     depends_on:
       - buildmart-materials
+    networks:
+      - buildmart-net
+
+  buildmart-workers-bff:
+    build:
+      context: ./bff
+      dockerfile: buildmart-workers-bff/Dockerfile
+    ports:
+      - "8102:8102"
+    environment:
+      ip_port: buildmart-workers:8002
+    depends_on:
       - buildmart-workers
+    networks:
+      - buildmart-net
+
+  buildmart-delivery-bff:
+    build:
+      context: ./bff
+      dockerfile: buildmart-delivery-bff/Dockerfile
+    ports:
+      - "8103:8103"
+    environment:
+      ip_port: buildmart-delivery:8003
+    depends_on:
       - buildmart-delivery
     networks:
       - buildmart-net

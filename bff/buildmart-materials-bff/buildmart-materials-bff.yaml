@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-materials-bff
+  namespace: buildmart
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-materials-bff
+  template:
+    metadata:
+      labels:
+        app: buildmart-materials-bff
+    spec:
+      containers:
+        - name: buildmart-materials-bff
+          image: buildmart-materials-bff:latest
+          ports:
+            - containerPort: 8101
+          env:
+            - name: ip_port
+              value: buildmart-materials:8001
+          livenessProbe:
+            httpGet:
+              path: /buildmart-materials-bff/health
+              port: 8101
