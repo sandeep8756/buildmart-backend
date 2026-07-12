@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
+
 bff/*/middleware.py
 bff/*/requirements.txt
 bff/*/utils/common.py
