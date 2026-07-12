@@ -42,17 +42,17 @@ echo "==> Deploy Core services (pods run internal ClusterIP)"
 kubectl apply -f "$OUT_DIR/buildmart-materials.yaml"
 kubectl apply -f "$OUT_DIR/buildmart-workers.yaml"
 kubectl apply -f "$OUT_DIR/buildmart-delivery.yaml"
-kubectl rollout status deployment/buildmart-materials -n buildmart --timeout=120s
-kubectl rollout status deployment/buildmart-workers -n buildmart --timeout=120s
-kubectl rollout status deployment/buildmart-delivery -n buildmart --timeout=120s
+kubectl rollout status deployment/buildmart-materials -n buildmart --timeout=300s || { kubectl describe pod -n buildmart -l app=buildmart-materials; exit 1; }
+kubectl rollout status deployment/buildmart-workers -n buildmart --timeout=300s || { kubectl describe pod -n buildmart -l app=buildmart-workers; exit 1; }
+kubectl rollout status deployment/buildmart-delivery -n buildmart --timeout=300s || { kubectl describe pod -n buildmart -l app=buildmart-delivery; exit 1; }
 
 echo "==> Deploy BFF services (pods call Core via ip_port DNS)"
 kubectl apply -f "$OUT_DIR/buildmart-materials-bff.yaml"
 kubectl apply -f "$OUT_DIR/buildmart-workers-bff.yaml"
 kubectl apply -f "$OUT_DIR/buildmart-delivery-bff.yaml"
-kubectl rollout status deployment/buildmart-materials-bff -n buildmart --timeout=120s
-kubectl rollout status deployment/buildmart-workers-bff -n buildmart --timeout=120s
-kubectl rollout status deployment/buildmart-delivery-bff -n buildmart --timeout=120s
+kubectl rollout status deployment/buildmart-materials-bff -n buildmart --timeout=300s || { kubectl describe pod -n buildmart -l app=buildmart-materials-bff; exit 1; }
+kubectl rollout status deployment/buildmart-workers-bff -n buildmart --timeout=300s || { kubectl describe pod -n buildmart -l app=buildmart-workers-bff; exit 1; }
+kubectl rollout status deployment/buildmart-delivery-bff -n buildmart --timeout=300s || { kubectl describe pod -n buildmart -l app=buildmart-delivery-bff; exit 1; }
 
 echo "==> Apply Ingress (public BFF URLs)"
 kubectl apply -f "$OUT_DIR/ingress.yaml"

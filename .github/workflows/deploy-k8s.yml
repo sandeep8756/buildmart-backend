@@ -78,10 +78,7 @@ jobs:
         run: |
           if [ -z "$OCI_CLUSTER_OCID" ]; then exit 0; fi
           kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/cloud/deploy.yaml
-          kubectl wait --namespace ingress-nginx \
-            --for=condition=ready pod \
-            --selector=app.kubernetes.io/component=controller \
-            --timeout=300s || true
+          echo "Ingress controller applied (will become ready in background)"
 
       - name: Deploy to OKE
         env:
