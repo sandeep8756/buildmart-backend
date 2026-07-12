@@ -2,6 +2,9 @@
 
 FastAPI backend for **M&P – Buy Materials. Book Workers. Build Faster.**
 
+**Project board:** https://github.com/users/sandeep8756/projects/2  
+**Frontend repo:** https://github.com/sandeep8756/buildmart
+
 Structured following the Observability platform model — **separate BFF microservices** under `bff/` (like `jio-hcmp-deeptrace-topology-bff`, `jio-hcmp-deeptrace-onboarding-bff`).
 
 ## Architecture
