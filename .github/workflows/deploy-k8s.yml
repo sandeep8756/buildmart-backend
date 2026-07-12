@@ -23,21 +23,89 @@ jobs:
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
 
-      - name: Deploy to K8s
+      - name: Install OCI CLI
+        run: |
+          pip install oci-cli
+          oci --version
+
+      - name: Configure OCI credentials
         env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_API_KEY: ${{ secrets.OCI_API_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+        run: |
+          if [ -z "$OCI_TENANCY_OCID" ] || [ -z "$OCI_USER_OCID" ] || [ -z "$OCI_FINGERPRINT" ] || [ -z "$OCI_API_KEY" ] || [ -z "$OCI_REGION" ]; then
+            echo "::notice::OCI secrets not set. Skipping deploy."
+            echo "Add OCI_TENANCY_OCID, OCI_USER_OCID, OCI_FINGERPRINT, OCI_API_KEY, OCI_REGION, OCI_CLUSTER_OCID to GitHub Secrets."
+            exit 0
+          fi
+          mkdir -p ~/.oci
+          echo "$OCI_API_KEY" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=${OCI_USER_OCID}
+          fingerprint=${OCI_FINGERPRINT}
+          tenancy=${OCI_TENANCY_OCID}
+          region=${OCI_REGION}
+          key_file=~/.oci/oci_api_key.pem
+          EOF
+          chmod 600 ~/.oci/config
+
+      - name: Generate kubeconfig from OCI
+        env:
+          OCI_CLUSTER_OCID: ${{ secrets.OCI_CLUSTER_OCID }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+        run: |
+          if [ -z "$OCI_CLUSTER_OCID" ]; then
+            echo "::notice::OCI_CLUSTER_OCID not set. Skipping deploy."
+            exit 0
+          fi
+          mkdir -p ~/.kube
+          oci ce cluster create-kubeconfig \
+            --cluster-id "$OCI_CLUSTER_OCID" \
+            --file "$HOME/.kube/config" \
+            --region "$OCI_REGION" \
+            --token-version 2.0.0
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+
+      - name: Install NGINX Ingress Controller
+        env:
+          OCI_CLUSTER_OCID: ${{ secrets.OCI_CLUSTER_OCID }}
+        run: |
+          if [ -z "$OCI_CLUSTER_OCID" ]; then exit 0; fi
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.3/deploy/static/provider/cloud/deploy.yaml
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=300s || true
+
+      - name: Deploy to OKE
+        env:
+          OCI_CLUSTER_OCID: ${{ secrets.OCI_CLUSTER_OCID }}
           REGISTRY: ghcr.io/${{ github.repository_owner }}
           TAG: ${{ github.event.inputs.tag || 'latest' }}
           API_HOST: ${{ vars.API_HOST || 'api.buildmart.example.com' }}
         run: |
-          if [ -z "$KUBE_CONFIG_DATA" ]; then
-            echo "::notice::KUBE_CONFIG_DATA secret not set. Images built and released to ghcr.io."
-            echo "To enable auto-deploy, add secret KUBE_CONFIG_DATA (base64 kubeconfig) in repo Settings → Secrets."
-            exit 0
-          fi
-          mkdir -p ~/.kube
-          echo "$KUBE_CONFIG_DATA" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-          kubectl cluster-info
+          if [ -z "$OCI_CLUSTER_OCID" ]; then exit 0; fi
           chmod +x scripts/deploy-k8s.sh
           ./scripts/deploy-k8s.sh
+
+      - name: Show Ingress IP
+        env:
+          OCI_CLUSTER_OCID: ${{ secrets.OCI_CLUSTER_OCID }}
+        run: |
+          if [ -z "$OCI_CLUSTER_OCID" ]; then exit 0; fi
+          echo "## Deployment URLs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          EXTERNAL_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "pending")
+          echo "**Ingress IP:** $EXTERNAL_IP" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Set in Vercel env vars:" >> $GITHUB_STEP_SUMMARY
+          echo "\`NEXT_PUBLIC_MATERIALS_BFF_URL=http://$EXTERNAL_IP\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`NEXT_PUBLIC_WORKERS_BFF_URL=http://$EXTERNAL_IP\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`NEXT_PUBLIC_DELIVERY_BFF_URL=http://$EXTERNAL_IP\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods,svc,ingress -n buildmart

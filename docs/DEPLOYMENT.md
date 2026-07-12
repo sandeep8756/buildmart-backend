@@ -30,14 +30,22 @@ ghcr.io/sandeep8756/buildmart-delivery-bff
 
 ### Enable auto-deploy to K8s (one-time)
 
-```bash
-# Base64 your PERSONAL kubeconfig (not office)
-base64 -w0 ~/.kube/config
-```
+**Deploy from GitHub only — no local laptop needed.**
 
-Add as GitHub secret: **Settings → Secrets → `KUBE_CONFIG_DATA`**
+Add these secrets in **Settings → Secrets → Actions**:
 
-Optional variable: **Settings → Variables → `API_HOST`** = `api.yourdomain.com`
+| Secret | Value |
+|--------|-------|
+| `OCI_TENANCY_OCID` | From OCI API key config |
+| `OCI_USER_OCID` | From OCI API key config |
+| `OCI_FINGERPRINT` | From OCI API key config |
+| `OCI_API_KEY` | Private key `.pem` file content |
+| `OCI_REGION` | `ap-mumbai-1` |
+| `OCI_CLUSTER_OCID` | `buildmart-oke` cluster ID |
+
+Full guide: [docs/GITHUB-OCI-DEPLOY.md](docs/GITHUB-OCI-DEPLOY.md)
+
+Then: **Actions → Deploy to Kubernetes → Run workflow**
 
 ---
 
