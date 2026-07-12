@@ -1,0 +1,43 @@
+name: Deploy to Kubernetes
+
+on:
+  workflow_run:
+    workflows: [Build and Release]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to deploy
+        required: false
+        default: latest
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Deploy to K8s
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          TAG: ${{ github.event.inputs.tag || 'latest' }}
+          API_HOST: ${{ vars.API_HOST || 'api.buildmart.example.com' }}
+        run: |
+          if [ -z "$KUBE_CONFIG_DATA" ]; then
+            echo "::notice::KUBE_CONFIG_DATA secret not set. Images built and released to ghcr.io."
+            echo "To enable auto-deploy, add secret KUBE_CONFIG_DATA (base64 kubeconfig) in repo Settings → Secrets."
+            exit 0
+          fi
+          mkdir -p ~/.kube
+          echo "$KUBE_CONFIG_DATA" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl cluster-info
+          chmod +x scripts/deploy-k8s.sh
+          ./scripts/deploy-k8s.sh

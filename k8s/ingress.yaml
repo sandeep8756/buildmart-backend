@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: buildmart-bff
+  namespace: buildmart
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ${API_HOST}
+      http:
+        paths:
+          - path: /buildmart-materials-bff
+            pathType: Prefix
+            backend:
+              service:
+                name: buildmart-materials-bff
+                port:
+                  number: 8101
+          - path: /buildmart-workers-bff
+            pathType: Prefix
+            backend:
+              service:
+                name: buildmart-workers-bff
+                port:
+                  number: 8102
+          - path: /buildmart-delivery-bff
+            pathType: Prefix
+            backend:
+              service:
+                name: buildmart-delivery-bff
+                port:
+                  number: 8103
+  tls:
+    - hosts:
+        - ${API_HOST}
+      secretName: buildmart-api-tls

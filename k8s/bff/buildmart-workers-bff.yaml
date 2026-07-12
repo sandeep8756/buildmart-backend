@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-workers-bff
+  namespace: buildmart
+  labels:
+    app: buildmart-workers-bff
+    layer: bff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-workers-bff
+  template:
+    metadata:
+      labels:
+        app: buildmart-workers-bff
+        layer: bff
+    spec:
+      containers:
+        - name: buildmart-workers-bff
+          image: ${REGISTRY}/buildmart-workers-bff:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8102
+          env:
+            - name: ip_port
+              value: buildmart-workers:8002
+          livenessProbe:
+            httpGet:
+              path: /buildmart-workers-bff/health
+              port: 8102
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /buildmart-workers-bff/health
+              port: 8102
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildmart-workers-bff
+  namespace: buildmart
+  labels:
+    app: buildmart-workers-bff
+    layer: bff
+spec:
+  type: ClusterIP
+  selector:
+    app: buildmart-workers-bff
+  ports:
+    - name: http
+      port: 8102
+      targetPort: 8102

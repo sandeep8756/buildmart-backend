@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-materials
+  namespace: buildmart
+  labels:
+    app: buildmart-materials
+    layer: core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-materials
+  template:
+    metadata:
+      labels:
+        app: buildmart-materials
+        layer: core
+    spec:
+      containers:
+        - name: buildmart-materials
+          image: ${REGISTRY}/buildmart-materials:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          livenessProbe:
+            httpGet:
+              path: /buildmart-materials/health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /buildmart-materials/health
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildmart-materials
+  namespace: buildmart
+  labels:
+    app: buildmart-materials
+    layer: core
+spec:
+  type: ClusterIP
+  selector:
+    app: buildmart-materials
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001

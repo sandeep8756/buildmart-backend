@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-delivery-bff
+  namespace: buildmart
+  labels:
+    app: buildmart-delivery-bff
+    layer: bff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-delivery-bff
+  template:
+    metadata:
+      labels:
+        app: buildmart-delivery-bff
+        layer: bff
+    spec:
+      containers:
+        - name: buildmart-delivery-bff
+          image: ${REGISTRY}/buildmart-delivery-bff:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8103
+          env:
+            - name: ip_port
+              value: buildmart-delivery:8003
+          livenessProbe:
+            httpGet:
+              path: /buildmart-delivery-bff/health
+              port: 8103
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /buildmart-delivery-bff/health
+              port: 8103
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildmart-delivery-bff
+  namespace: buildmart
+  labels:
+    app: buildmart-delivery-bff
+    layer: bff
+spec:
+  type: ClusterIP
+  selector:
+    app: buildmart-delivery-bff
+  ports:
+    - name: http
+      port: 8103
+      targetPort: 8103

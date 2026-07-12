@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-delivery
+  namespace: buildmart
+  labels:
+    app: buildmart-delivery
+    layer: core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-delivery
+  template:
+    metadata:
+      labels:
+        app: buildmart-delivery
+        layer: core
+    spec:
+      containers:
+        - name: buildmart-delivery
+          image: ${REGISTRY}/buildmart-delivery:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8003
+          livenessProbe:
+            httpGet:
+              path: /buildmart-delivery/health
+              port: 8003
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /buildmart-delivery/health
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildmart-delivery
+  namespace: buildmart
+  labels:
+    app: buildmart-delivery
+    layer: core
+spec:
+  type: ClusterIP
+  selector:
+    app: buildmart-delivery
+  ports:
+    - name: http
+      port: 8003
+      targetPort: 8003

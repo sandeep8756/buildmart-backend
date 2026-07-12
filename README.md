@@ -108,6 +108,25 @@ Common uses `utils/common_properties.py` to avoid overwriting service files.
 docker compose up --build
 ```
 
+## Kubernetes deployment (personal cluster)
+
+**Automated via GitHub Actions** — every push to `main` builds and releases images to `ghcr.io`.
+
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| `build-release.yml` | Push to `main` | Builds 6 Docker images → pushes to ghcr.io |
+| `deploy-k8s.yml` | After build succeeds | Deploys pods to K8s (needs `KUBE_CONFIG_DATA` secret) |
+
+**Manual (local):**
+
+```bash
+./scripts/build-images.sh          # 1. Build 6 Docker images
+./scripts/push-images.sh           # 2. Push to ghcr.io (release)
+./scripts/deploy-k8s.sh            # 3. Run Core + BFF pods in K8s
+```
+
+Full guide: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+
 | Service | Port | Swagger |
 |---------|------|---------|
 | Materials BFF | 8101 | http://localhost:8101/docs |

@@ -21,3 +21,5 @@ core/*/utils/decorators_async.py
 core/*/utils/exceptions.py
 core/*/utils/logging_cfg.py
 core/*/utils/logging.conf
+
+k8s/generated/

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-materials-bff
+  namespace: buildmart
+  labels:
+    app: buildmart-materials-bff
+    layer: bff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-materials-bff
+  template:
+    metadata:
+      labels:
+        app: buildmart-materials-bff
+        layer: bff
+    spec:
+      containers:
+        - name: buildmart-materials-bff
+          image: ${REGISTRY}/buildmart-materials-bff:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8101
+          env:
+            - name: ip_port
+              value: buildmart-materials:8001
+          livenessProbe:
+            httpGet:
+              path: /buildmart-materials-bff/health
+              port: 8101
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /buildmart-materials-bff/health
+              port: 8101
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildmart-materials-bff
+  namespace: buildmart
+  labels:
+    app: buildmart-materials-bff
+    layer: bff
+spec:
+  type: ClusterIP
+  selector:
+    app: buildmart-materials-bff
+  ports:
+    - name: http
+      port: 8101
+      targetPort: 8101

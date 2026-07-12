@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildmart-workers
+  namespace: buildmart
+  labels:
+    app: buildmart-workers
+    layer: core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildmart-workers
+  template:
+    metadata:
+      labels:
+        app: buildmart-workers
+        layer: core
+    spec:
+      containers:
+        - name: buildmart-workers
+          image: ${REGISTRY}/buildmart-workers:${TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8002
+          livenessProbe:
+            httpGet:
+              path: /buildmart-workers/health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /buildmart-workers/health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildmart-workers
+  namespace: buildmart
+  labels:
+    app: buildmart-workers
+    layer: core
+spec:
+  type: ClusterIP
+  selector:
+    app: buildmart-workers
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002

@@ -1,0 +1,95 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: buildmart-materials
+            dockerfile: core/buildmart-materials/Dockerfile
+            context: core
+          - service: buildmart-workers
+            dockerfile: core/buildmart-workers/Dockerfile
+            context: core
+          - service: buildmart-delivery
+            dockerfile: core/buildmart-delivery/Dockerfile
+            context: core
+          - service: buildmart-materials-bff
+            dockerfile: bff/buildmart-materials-bff/Dockerfile
+            context: bff
+          - service: buildmart-workers-bff
+            dockerfile: bff/buildmart-workers-bff/Dockerfile
+            context: bff
+          - service: buildmart-delivery-bff
+            dockerfile: bff/buildmart-delivery-bff/Dockerfile
+            context: bff
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release-summary:
+    needs: build-and-push
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## Release complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Images pushed to **ghcr.io/${{ github.repository_owner }}/**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Image |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| materials core | \`ghcr.io/${{ github.repository_owner }}/buildmart-materials:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| workers core | \`ghcr.io/${{ github.repository_owner }}/buildmart-workers:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| delivery core | \`ghcr.io/${{ github.repository_owner }}/buildmart-delivery:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| materials bff | \`ghcr.io/${{ github.repository_owner }}/buildmart-materials-bff:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| workers bff | \`ghcr.io/${{ github.repository_owner }}/buildmart-workers-bff:latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| delivery bff | \`ghcr.io/${{ github.repository_owner }}/buildmart-delivery-bff:latest\` |" >> $GITHUB_STEP_SUMMARY
