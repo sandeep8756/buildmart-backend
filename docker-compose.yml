@@ -1,84 +1,47 @@
+version: "3.8"
+
 services:
-  materials-service:
+  buildmart-materials:
     build:
-      context: .
-      dockerfile: core/materials-service/Dockerfile
+      context: ./core
+      dockerfile: buildmart-materials/Dockerfile
     ports:
       - "8001:8001"
     networks:
       - buildmart-net
 
-  workers-service:
+  buildmart-workers:
     build:
-      context: .
-      dockerfile: core/workers-service/Dockerfile
+      context: ./core
+      dockerfile: buildmart-workers/Dockerfile
     ports:
       - "8002:8002"
     networks:
       - buildmart-net
 
-  delivery-service:
+  buildmart-delivery:
     build:
-      context: .
-      dockerfile: core/delivery-service/Dockerfile
+      context: ./core
+      dockerfile: buildmart-delivery/Dockerfile
     ports:
       - "8003:8003"
     networks:
       - buildmart-net
 
-  materials-bff:
+  buildmart-bff:
     build:
-      context: .
-      dockerfile: bff/materials-bff/Dockerfile
+      context: ./bff
+      dockerfile: buildmart-bff/Dockerfile
     ports:
-      - "8101:8101"
+      - "8084:8084"
     environment:
-      MATERIALS_CORE_URL: http://materials-service:8001
+      ip_port_materials: buildmart-materials:8001
+      ip_port_workers: buildmart-workers:8002
+      ip_port_delivery: buildmart-delivery:8003
     depends_on:
-      - materials-service
-    networks:
-      - buildmart-net
-
-  workers-bff:
-    build:
-      context: .
-      dockerfile: bff/workers-bff/Dockerfile
-    ports:
-      - "8102:8102"
-    environment:
-      WORKERS_CORE_URL: http://workers-service:8002
-    depends_on:
-      - workers-service
-    networks:
-      - buildmart-net
-
-  delivery-bff:
-    build:
-      context: .
-      dockerfile: bff/delivery-bff/Dockerfile
-    ports:
-      - "8103:8103"
-    environment:
-      DELIVERY_CORE_URL: http://delivery-service:8003
-    depends_on:
-      - delivery-service
-    networks:
-      - buildmart-net
-
-  gateway:
-    build:
-      context: .
-      dockerfile: bff/gateway/Dockerfile
-    ports:
-      - "8080:8080"
-    environment:
-      MATERIALS_BFF_URL: http://materials-bff:8101
-      WORKERS_BFF_URL: http://workers-bff:8102
-      DELIVERY_BFF_URL: http://delivery-bff:8103
-    depends_on:
-      - materials-bff
-      - workers-bff
-      - delivery-bff
+      - buildmart-materials
+      - buildmart-workers
+      - buildmart-delivery
     networks:
       - buildmart-net
 

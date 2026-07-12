@@ -1,28 +1,30 @@
 # BuildMart Backend
 
-FastAPI microservices backend for **M&P – Buy Materials. Book Workers. Build Faster.**
+FastAPI backend for **M&P – Buy Materials. Book Workers. Build Faster.**
+
+Structured following the Observability platform model (`jio-hcmp-deeptrace-bff` / `jio-hcmp-deeptrace`).
 
 ## Architecture
 
 ```
-Frontend (Next.js)
-       │
-       ▼
-┌──────────────────────────────────────────────┐
-│  BFF Layer                                   │
-│  ├── gateway          :8080  (API Gateway)   │
-│  ├── materials-bff    :8101                  │
-│  ├── workers-bff      :8102                  │
-│  └── delivery-bff     :8103                  │
-└──────────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────────────────┐
-│  Core Layer                                  │
-│  ├── materials-service  :8001                │
-│  ├── workers-service    :8002                │
-│  └── delivery-service   :8003                │
-└──────────────────────────────────────────────┘
+Frontend (buildmart UI)
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│  bff/buildmart-bff          :8084       │
+│  application/api_materials              │
+│  application/api_workers                │
+│  application/api_delivery               │
+│  + bff/common (merged at Docker build)  │
+└─────────────────────────────────────────┘
+        │ fetch_get / fetch_post
+        ▼
+┌─────────────────────────────────────────┐
+│  core/buildmart-materials   :8001       │
+│  core/buildmart-workers     :8002       │
+│  core/buildmart-delivery    :8003       │
+│  + core/common (merged at Docker build) │
+└─────────────────────────────────────────┘
 ```
 
 ## Project Structure
@@ -30,87 +32,89 @@ Frontend (Next.js)
 ```
 buildmart-backend/
 ├── bff/
-│   ├── gateway/           # Single API entry point
-│   ├── materials-bff/     # UI-optimized materials API
-│   ├── workers-bff/       # UI-optimized workers API
-│   └── delivery-bff/      # UI-optimized delivery API
+│   ├── common/                    # Shared BFF code (like Observability/bff/common)
+│   │   ├── middleware.py
+│   │   ├── requirements.txt
+│   │   └── utils/
+│   └── buildmart-bff/             # Single BFF deployable (like jio-hcmp-deeptrace-bff)
+│       ├── main.py
+│       ├── start.sh
+│       ├── Dockerfile
+│       ├── buildmart-bff.yaml
+│       ├── application/
+│       │   ├── router.py
+│       │   ├── api_materials/   # router → service → core
+│       │   ├── api_workers/
+│       │   └── api_delivery/
+│       └── utils/properties.py
 ├── core/
-│   ├── materials-service/ # Materials business logic
-│   ├── workers-service/   # Workers business logic
-│   └── delivery-service/  # Delivery business logic
-├── shared/                # Shared Pydantic models
+│   ├── common/                    # Shared core code (like Observability/core/common)
+│   ├── buildmart-materials/       # Core microservice
+│   ├── buildmart-workers/
+│   └── buildmart-delivery/
 └── docker-compose.yml
 ```
 
-## Quick Start (Docker)
+## Per-service layering (Observability pattern)
+
+```
+v1.py / router.py     → HTTP routes + decorators
+service.py            → Business logic
+repository.py         → Data access (mock data for now)
+schemas.py            → Pydantic models
+main.py               → FastAPI app + router mounting
+start.sh              → Gunicorn + UvicornWorker
+Dockerfile            → Merges common/ at build time
+```
+
+## Quick Start
 
 ```bash
 docker compose up --build
 ```
 
-API Gateway: http://localhost:8080  
-Swagger docs: http://localhost:8080/docs
+| Service | URL |
+|---------|-----|
+| BFF Gateway | http://localhost:8084 |
+| BFF Swagger | http://localhost:8084/docs |
+| Materials Core | http://localhost:8001/buildmart-materials/health |
+| Workers Core | http://localhost:8002/buildmart-workers/health |
+| Delivery Core | http://localhost:8003/buildmart-delivery/health |
 
-## Quick Start (Local)
-
-Run each service in a separate terminal:
-
-```bash
-# Core services
-cd core/materials-service && pip install -r requirements.txt && uvicorn main:app --port 8001 --reload
-cd core/workers-service  && pip install -r requirements.txt && uvicorn main:app --port 8002 --reload
-cd core/delivery-service && pip install -r requirements.txt && uvicorn main:app --port 8003 --reload
-
-# BFF services
-cd bff/materials-bff && pip install -r requirements.txt && uvicorn main:app --port 8101 --reload
-cd bff/workers-bff   && pip install -r requirements.txt && uvicorn main:app --port 8102 --reload
-cd bff/delivery-bff  && pip install -r requirements.txt && uvicorn main:app --port 8103 --reload
-
-# Gateway
-cd bff/gateway && pip install -r requirements.txt && uvicorn main:app --port 8080 --reload
-```
-
-## API Endpoints (via Gateway)
+## BFF API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/materials` | List materials (filter: category, search) |
-| GET | `/api/v1/materials/{id}` | Get material by ID |
-| GET | `/api/v1/workers` | List workers (filter: category, search, available) |
-| GET | `/api/v1/workers/{id}` | Get worker by ID |
-| GET | `/api/v1/delivery` | List delivery options |
-| POST | `/api/v1/delivery/quote` | Calculate delivery price |
-| GET | `/health` | Gateway + BFF health check |
+| GET | `/buildmart-bff/materials_list_bff` | List materials |
+| GET | `/buildmart-bff/material_detail_bff/{id}` | Material detail |
+| GET | `/buildmart-bff/workers_list_bff` | List workers |
+| GET | `/buildmart-bff/worker_detail_bff/{id}` | Worker detail |
+| GET | `/buildmart-bff/delivery_options_bff` | Delivery options |
+| POST | `/buildmart-bff/delivery_quote_bff` | Calculate delivery quote |
+| GET | `/buildmart-bff/common/health` | BFF health check |
 
-## Example Requests
+## Core API Endpoints
 
-```bash
-# List materials
-curl http://localhost:8080/api/v1/materials
+| Service | Endpoint |
+|---------|----------|
+| Materials | `/buildmart-materials/materials_list` |
+| Workers | `/buildmart-workers/workers_list` |
+| Delivery | `/buildmart-delivery/delivery_options` |
 
-# Search workers
-curl "http://localhost:8080/api/v1/workers?category=plumber&available=true"
+## Environment Variables (BFF)
 
-# Delivery quote
-curl -X POST http://localhost:8080/api/v1/delivery/quote \
-  -H "Content-Type: application/json" \
-  -d '{"optionId": "d1", "distanceKm": 10}'
-```
-
-## Tech Stack
-
-- Python 3.11
-- FastAPI
-- Uvicorn
-- HTTPX (BFF → Core communication)
-- Docker & Docker Compose
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ip_port_materials` | `localhost:8001` | Materials core host:port |
+| `ip_port_workers` | `localhost:8002` | Workers core host:port |
+| `ip_port_delivery` | `localhost:8003` | Delivery core host:port |
 
 ## Repos
 
 | Repo | Purpose |
 |------|---------|
-| [buildmart](https://github.com/sandeep8756/buildmart) | Frontend (Next.js UI) |
-| [buildmart-backend](https://github.com/sandeep8756/buildmart-backend) | Backend (BFF + Core) |
+| [buildmart](https://github.com/sandeep8756/buildmart) | Frontend UI |
+| [buildmart-backend](https://github.com/sandeep8756/buildmart-backend) | BFF + Core APIs |
 
 ## License
 
