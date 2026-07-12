@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 import utils.logging_cfg
 from application.api.v1 import v1
 from middleware import Middle
-from utils.common_api import common_v1
 from utils.exceptions import Error
 
 app = FastAPI(title="BuildMart Materials BFF", version="1.0.0")
@@ -39,4 +38,3 @@ async def exception_handler(request: Request, exc: Error):
 
 
 app.include_router(v1, prefix="/buildmart-materials-bff")
-app.include_router(common_v1, prefix="/buildmart-materials-bff/common")

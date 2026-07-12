@@ -63,6 +63,42 @@ buildmart-materials-bff/
     └── schemas.py          # Pydantic models
 ```
 
+## Shared `common/` pattern (like Observability)
+
+`bff/common/` and `core/common/` hold **shared utilities only** — no business APIs.
+
+| File | Purpose |
+|------|---------|
+| `middleware.py` | Request timing middleware |
+| `requirements.txt` | Shared Python dependencies |
+| `utils/exceptions.py` | Custom `Error` exception |
+| `utils/decorators_async.py` | `@exception_handler`, `@async_log_pre_post` |
+| `utils/common_async.py` | `fetch_get`, `fetch_post` (BFF only) |
+| `utils/common.py` | Shared sync helpers |
+| `utils/common_properties.py` | Shared env configuration |
+| `utils/logging_cfg.py` | Logging setup |
+| `utils/logging.conf` | Log format config |
+
+**APIs live only inside each microservice** under `application/api/v1.py`.
+
+### How common is merged into microservices
+
+**Docker build** (automatic in every Dockerfile):
+```dockerfile
+COPY common/ ./common/
+RUN cp -r common/* ./ && rm -rf common
+```
+
+**Local dev without Docker**:
+```bash
+chmod +x scripts/copy-common.sh scripts/clean-common.sh
+./scripts/copy-common.sh    # merge common into all microservices
+./scripts/clean-common.sh   # remove copied files before git commit
+```
+
+Each microservice keeps its own `utils/properties.py` for service-specific config.
+Common uses `utils/common_properties.py` to avoid overwriting service files.
+
 ## Quick Start
 
 ```bash

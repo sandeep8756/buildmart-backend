@@ -11,7 +11,6 @@ load_dotenv()
 import utils.logging_cfg
 from application.api.v1 import v1
 from middleware import Middle
-from utils.common_api import common_v1
 from utils.exceptions import Error
 
 app = FastAPI(title="BuildMart Workers Core", version="1.0.0")
@@ -38,4 +37,3 @@ async def exception_handler(request: Request, exc: Error):
 
 
 app.include_router(v1, prefix="/buildmart-workers")
-app.include_router(common_v1, prefix="/buildmart-workers/common")
