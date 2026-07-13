@@ -41,6 +41,46 @@ jobs:
             ConnectTimeout 60
           EOF
 
+      - name: Reboot VM via OCI API
+        env:
+          OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_API_KEY: ${{ secrets.OCI_API_KEY }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+        run: |
+          if [ -z "$OCI_TENANCY_OCID" ] || [ -z "$OCI_API_KEY" ]; then
+            echo "::notice::OCI secrets not set, skipping reboot"
+            exit 0
+          fi
+          pip install -q oci-cli jq
+          mkdir -p ~/.oci
+          echo "$OCI_API_KEY" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=${OCI_USER_OCID}
+          fingerprint=${OCI_FINGERPRINT}
+          tenancy=${OCI_TENANCY_OCID}
+          region=${OCI_REGION}
+          key_file=~/.oci/oci_api_key.pem
+          EOF
+          INSTANCE_ID=$(oci compute instance list \
+            --compartment-id "$OCI_TENANCY_OCID" \
+            --compartment-id-in-subtree true \
+            --display-name "buildmart-vm" \
+            --lifecycle-state RUNNING \
+            --query 'data[0].id' --raw-output)
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "null" ]; then
+            echo "::warning::buildmart-vm not found in RUNNING state"
+            exit 0
+          fi
+          echo "Rebooting instance $INSTANCE_ID"
+          oci compute instance action --action SOFTRESET --instance-id "$INSTANCE_ID"
+          oci compute instance get --instance-id "$INSTANCE_ID" --wait-for-state RUNNING --max-wait-seconds 300
+          echo "Waiting 90s for sshd..."
+          sleep 90
+
       - name: Wait for SSH
         run: |
           for i in 1 2 3 4 5 6 7 8 9 10; do
