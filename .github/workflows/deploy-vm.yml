@@ -70,33 +70,35 @@ jobs:
             sudo swapon /swapfile
           fi
 
-          if ! command -v docker &>/dev/null; then
+          if [ ! -x /home/opc/docker/dockerd ]; then
             echo "==> Installing Docker static binaries"
             mkdir -p /home/opc/docker /home/opc/docker-data
             tar xzf /home/opc/docker-static.tgz -C /home/opc/docker
+            chmod +x /home/opc/docker/*
           fi
 
-          if ! pgrep -x dockerd >/dev/null; then
+          if ! sudo /home/opc/docker/docker info >/dev/null 2>&1; then
             echo "==> Starting dockerd"
-            nohup /home/opc/docker/dockerd --data-root /home/opc/docker-data > /home/opc/dockerd.log 2>&1 &
+            sudo nohup /home/opc/docker/dockerd --data-root /home/opc/docker-data > /home/opc/dockerd.log 2>&1 &
             for i in $(seq 1 30); do
-              docker info >/dev/null 2>&1 && break
+              sudo /home/opc/docker/docker info >/dev/null 2>&1 && break
               sleep 2
             done
+            sudo /home/opc/docker/docker info || (echo "dockerd log:"; tail -50 /home/opc/dockerd.log; exit 1)
           fi
 
           echo "==> Loading images"
           for img in buildmart-materials buildmart-workers buildmart-delivery \
             buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff; do
             echo "load $img"
-            gunzip -c "/home/opc/$img.tar.gz" | docker load
+            gunzip -c "/home/opc/$img.tar.gz" | sudo /home/opc/docker/docker load
             rm -f "/home/opc/$img.tar.gz"
             sync
           done
 
           cd /home/opc
-          docker compose -f docker-compose.ghcr.yml up -d
-          docker compose -f docker-compose.ghcr.yml ps
+          sudo /home/opc/docker/docker compose -f docker-compose.ghcr.yml up -d
+          sudo /home/opc/docker/docker compose -f docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Verify BFF health on VM
@@ -111,7 +113,7 @@ jobs:
             curl -sf --connect-timeout 10 "http://localhost:$port/"
             echo ""
           done
-          docker compose -f /home/opc/docker-compose.ghcr.yml ps
+          sudo /home/opc/docker/docker compose -f /home/opc/docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Check external BFF access
