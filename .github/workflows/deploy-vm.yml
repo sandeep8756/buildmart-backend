@@ -11,6 +11,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VM_IP: ${{ inputs.vm_ip }}
+      REGISTRY: ghcr.io/sandeep8756
+      SSH_OPTS: -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 -o ConnectTimeout=30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,107 +32,58 @@ jobs:
           printf '%s\n' "${{ secrets.OCI_VM_SSH_KEY }}" > ~/.ssh/vm_key
           chmod 600 ~/.ssh/vm_key
 
-      - name: Prepare Docker static binaries on runner
+      - name: Bootstrap VM
         run: |
-          mkdir -p /tmp/docker-static
-          curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz" \
-            | tar xz -C /tmp/docker-static --strip-components=1
-          curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" \
-            -o /tmp/docker-static/docker-compose
-          chmod +x /tmp/docker-static/docker-compose
-          tar czf /tmp/docker-static.tgz -C /tmp/docker-static .
+          scp $SSH_OPTS scripts/vm-remote-bootstrap.sh opc@"$VM_IP":/home/opc/
+          ssh $SSH_OPTS opc@"$VM_IP" "bash /home/opc/vm-remote-bootstrap.sh"
 
-      - name: Pull images on runner
+      - name: Transfer compose file
         run: |
-          REGISTRY=ghcr.io/sandeep8756
-          for img in buildmart-materials buildmart-workers buildmart-delivery \
-            buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff; do
+          scp $SSH_OPTS docker-compose.ghcr.yml opc@"$VM_IP":/home/opc/
+
+      - name: Stream images to VM
+        run: |
+          IMAGES="buildmart-materials buildmart-workers buildmart-delivery \
+            buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff"
+          for img in $IMAGES; do
+            echo "==> $img"
             docker pull "$REGISTRY/$img:latest"
             docker save "$REGISTRY/$img:latest" | gzip > "/tmp/$img.tar.gz"
+            scp $SSH_OPTS "/tmp/$img.tar.gz" opc@"$VM_IP":/home/opc/
+            ssh $SSH_OPTS opc@"$VM_IP" \
+              "gunzip -c /home/opc/$img.tar.gz | podman load && rm -f /home/opc/$img.tar.gz"
+            rm -f "/tmp/$img.tar.gz"
           done
 
-      - name: Transfer files to VM
-        env:
-          VM_IP: ${{ inputs.vm_ip }}
+      - name: Start services on VM
         run: |
-          scp -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new \
-            /tmp/docker-static.tgz /tmp/*.tar.gz docker-compose.ghcr.yml opc@"$VM_IP":/home/opc/
-
-      - name: Install Docker and start services on VM
-        env:
-          VM_IP: ${{ inputs.vm_ip }}
-        run: |
-          ssh -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new opc@"$VM_IP" bash -s <<'REMOTE'
+          ssh $SSH_OPTS opc@"$VM_IP" bash -s <<'REMOTE'
           set -euo pipefail
-          export PATH="/home/opc/docker:$PATH"
-
-          if [ "$(free -m | awk '/^Mem:/{print $2}')" -lt 2048 ] && ! swapon --show 2>/dev/null | grep -q /swapfile; then
-            echo "==> Adding 2GB swap"
-            sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
-            sudo chmod 600 /swapfile
-            sudo mkswap /swapfile
-            sudo swapon /swapfile
-          fi
-
-          if [ ! -x /home/opc/docker/dockerd ]; then
-            echo "==> Installing Docker static binaries"
-            mkdir -p /home/opc/docker /home/opc/docker-data
-            tar xzf /home/opc/docker-static.tgz -C /home/opc/docker
-            chmod +x /home/opc/docker/*
-          fi
-
-          if ! sudo /home/opc/docker/docker info >/dev/null 2>&1; then
-            echo "==> Starting dockerd"
-            sudo nohup /home/opc/docker/dockerd \
-              --data-root /home/opc/docker-data \
-              --userland-proxy-path /home/opc/docker/docker-proxy \
-              --containerd /home/opc/docker/containerd \
-              --containerd-namespace moby \
-              > /home/opc/dockerd.log 2>&1 &
-            for i in $(seq 1 30); do
-              sudo /home/opc/docker/docker info >/dev/null 2>&1 && break
-              sleep 2
-            done
-            sudo /home/opc/docker/docker info || (echo "dockerd log:"; tail -50 /home/opc/dockerd.log; exit 1)
-          fi
-
-          echo "==> Loading images"
-          for img in buildmart-materials buildmart-workers buildmart-delivery \
-            buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff; do
-            echo "load $img"
-            gunzip -c "/home/opc/$img.tar.gz" | sudo /home/opc/docker/docker load
-            rm -f "/home/opc/$img.tar.gz"
-            sync
-          done
-
           cd /home/opc
-          sudo /home/opc/docker/docker compose -f docker-compose.ghcr.yml up -d
-          sudo /home/opc/docker/docker compose -f docker-compose.ghcr.yml ps
+          podman compose -f docker-compose.ghcr.yml down 2>/dev/null || true
+          podman compose -f docker-compose.ghcr.yml up -d
+          podman compose -f docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Verify BFF health on VM
-        env:
-          VM_IP: ${{ inputs.vm_ip }}
         run: |
-          ssh -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new opc@"$VM_IP" bash -s <<'REMOTE'
+          ssh $SSH_OPTS opc@"$VM_IP" bash -s <<'REMOTE'
           set -euo pipefail
-          export PATH="/home/opc/docker:$PATH"
           for port in 8101 8102 8103; do
             echo "localhost:$port"
-            curl -sf --connect-timeout 10 "http://localhost:$port/"
+            curl -sf --connect-timeout 15 "http://localhost:$port/"
             echo ""
           done
-          sudo /home/opc/docker/docker compose -f /home/opc/docker-compose.ghcr.yml ps
+          podman compose -f /home/opc/docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Check external BFF access
-        env:
-          VM_IP: ${{ inputs.vm_ip }}
         run: |
           for port in 8101 8102 8103; do
-            if curl -sf --connect-timeout 10 "http://$VM_IP:$port/" >/dev/null; then
+            if curl -sf --connect-timeout 15 "http://$VM_IP:$port/" >/dev/null; then
               echo "OK external http://$VM_IP:$port/"
             else
-              echo "::warning::Cannot reach http://$VM_IP:$port/ from internet. Add ingress rules 8101-8103 on the VM subnet security list in OCI."
+              echo "::warning::Cannot reach http://$VM_IP:$port/ from internet."
+              echo "::warning::Open TCP $port on the security list for the VM subnet (not only k8sApiEndpoint)."
             fi
           done

@@ -5,6 +5,7 @@ services:
     image: ghcr.io/sandeep8756/buildmart-materials:latest
     ports:
       - "8001:8001"
+    mem_limit: 128m
     networks:
       - buildmart-net
 
@@ -12,6 +13,7 @@ services:
     image: ghcr.io/sandeep8756/buildmart-workers:latest
     ports:
       - "8002:8002"
+    mem_limit: 128m
     networks:
       - buildmart-net
 
@@ -19,6 +21,7 @@ services:
     image: ghcr.io/sandeep8756/buildmart-delivery:latest
     ports:
       - "8003:8003"
+    mem_limit: 128m
     networks:
       - buildmart-net
 
@@ -26,6 +29,7 @@ services:
     image: ghcr.io/sandeep8756/buildmart-materials-bff:latest
     ports:
       - "8101:8101"
+    mem_limit: 128m
     environment:
       ip_port: buildmart-materials:8001
     depends_on:
@@ -37,6 +41,7 @@ services:
     image: ghcr.io/sandeep8756/buildmart-workers-bff:latest
     ports:
       - "8102:8102"
+    mem_limit: 128m
     environment:
       ip_port: buildmart-workers:8002
     depends_on:
@@ -48,6 +53,7 @@ services:
     image: ghcr.io/sandeep8756/buildmart-delivery-bff:latest
     ports:
       - "8103:8103"
+    mem_limit: 128m
     environment:
       ip_port: buildmart-delivery:8003
     depends_on:
