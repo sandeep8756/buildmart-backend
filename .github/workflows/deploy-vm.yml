@@ -79,7 +79,12 @@ jobs:
 
           if ! sudo /home/opc/docker/docker info >/dev/null 2>&1; then
             echo "==> Starting dockerd"
-            sudo nohup /home/opc/docker/dockerd --data-root /home/opc/docker-data > /home/opc/dockerd.log 2>&1 &
+            sudo nohup /home/opc/docker/dockerd \
+              --data-root /home/opc/docker-data \
+              --userland-proxy-path /home/opc/docker/docker-proxy \
+              --containerd /home/opc/docker/containerd \
+              --containerd-namespace moby \
+              > /home/opc/dockerd.log 2>&1 &
             for i in $(seq 1 30); do
               sudo /home/opc/docker/docker info >/dev/null 2>&1 && break
               sleep 2
