@@ -12,6 +12,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Check SSH key secret
         run: |
           if [ -z "${{ secrets.OCI_VM_SSH_KEY }}" ]; then
@@ -25,15 +28,53 @@ jobs:
           printf '%s\n' "${{ secrets.OCI_VM_SSH_KEY }}" > ~/.ssh/vm_key
           chmod 600 ~/.ssh/vm_key
 
-      - name: Deploy backend on VM
+      - name: Pull images on runner
+        run: |
+          REGISTRY=ghcr.io/sandeep8756
+          for img in buildmart-materials buildmart-workers buildmart-delivery \
+            buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff; do
+            docker pull "$REGISTRY/$img:latest"
+            docker save "$REGISTRY/$img:latest" | gzip > "/tmp/$img.tar.gz"
+          done
+
+      - name: Transfer images and compose file to VM
         env:
           VM_IP: ${{ inputs.vm_ip }}
         run: |
-          ssh -i ~/.ssh/vm_key \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=30 \
-            opc@"$VM_IP" \
-            'curl -fsSL https://raw.githubusercontent.com/sandeep8756/buildmart-backend/main/scripts/setup-oci-vm-compose.sh | bash'
+          scp -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new \
+            /tmp/*.tar.gz docker-compose.ghcr.yml opc@"$VM_IP":/home/opc/
+
+      - name: Install Docker and start services on VM
+        env:
+          VM_IP: ${{ inputs.vm_ip }}
+        run: |
+          ssh -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new opc@"$VM_IP" bash -s <<'REMOTE'
+          set -euo pipefail
+
+          if [ "$(free -m | awk '/^Mem:/{print $2}')" -lt 2048 ] && ! swapon --show 2>/dev/null | grep -q /swapfile; then
+            echo "==> Adding 2GB swap"
+            sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+          fi
+
+          if ! command -v docker &>/dev/null; then
+            echo "==> Installing Docker"
+            sudo dnf install -y docker-engine docker-compose-plugin
+            sudo systemctl enable --now docker
+          fi
+
+          echo "==> Loading images"
+          for img in buildmart-materials buildmart-workers buildmart-delivery \
+            buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff; do
+            gunzip -c "/home/opc/$img.tar.gz" | sudo docker load
+          done
+
+          cd /home/opc
+          sudo docker compose -f docker-compose.ghcr.yml up -d
+          sudo docker compose -f docker-compose.ghcr.yml ps
+          REMOTE
 
       - name: Verify BFF health on VM
         env:
@@ -46,8 +87,7 @@ jobs:
             curl -sf --connect-timeout 10 "http://localhost:$port/"
             echo ""
           done
-          cd ~/buildmart-backend 2>/dev/null || cd buildmart-backend
-          docker compose ps
+          sudo docker compose -f /home/opc/docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Check external BFF access
