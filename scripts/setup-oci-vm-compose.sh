@@ -8,6 +8,15 @@ VM_IP="${VM_IP:-$(curl -s ifconfig.me 2>/dev/null || hostname -I | awk '{print $
 
 echo "==> M&P VM + Docker Compose setup"
 
+MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+if [ "$MEM_MB" -lt 2048 ] && ! swapon --show 2>/dev/null | grep -q /swapfile; then
+  echo "==> Adding 2GB swap (VM has ${MEM_MB}MB RAM)"
+  sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+fi
+
 if ! command -v docker &>/dev/null; then
   sudo dnf install -y docker-engine git curl
   sudo systemctl enable --now docker
