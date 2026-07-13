@@ -35,12 +35,29 @@ jobs:
             opc@"$VM_IP" \
             'curl -fsSL https://raw.githubusercontent.com/sandeep8756/buildmart-backend/main/scripts/setup-oci-vm-compose.sh | bash'
 
-      - name: Verify BFF health
+      - name: Verify BFF health on VM
+        env:
+          VM_IP: ${{ inputs.vm_ip }}
+        run: |
+          ssh -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new opc@"$VM_IP" bash -s <<'REMOTE'
+          set -euo pipefail
+          for port in 8101 8102 8103; do
+            echo "localhost:$port"
+            curl -sf --connect-timeout 10 "http://localhost:$port/"
+            echo ""
+          done
+          cd ~/buildmart-backend 2>/dev/null || cd buildmart-backend
+          docker compose ps
+          REMOTE
+
+      - name: Check external BFF access
         env:
           VM_IP: ${{ inputs.vm_ip }}
         run: |
           for port in 8101 8102 8103; do
-            echo "Checking http://$VM_IP:$port/"
-            curl -sf "http://$VM_IP:$port/" | head -c 200
-            echo ""
+            if curl -sf --connect-timeout 10 "http://$VM_IP:$port/" >/dev/null; then
+              echo "OK external http://$VM_IP:$port/"
+            else
+              echo "::warning::Cannot reach http://$VM_IP:$port/ from internet. Add ingress rules 8101-8103 on the VM subnet security list in OCI."
+            fi
           done
