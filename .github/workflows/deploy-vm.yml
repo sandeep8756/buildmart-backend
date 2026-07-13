@@ -28,6 +28,16 @@ jobs:
           printf '%s\n' "${{ secrets.OCI_VM_SSH_KEY }}" > ~/.ssh/vm_key
           chmod 600 ~/.ssh/vm_key
 
+      - name: Prepare Docker static binaries on runner
+        run: |
+          mkdir -p /tmp/docker-static
+          curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz" \
+            | tar xz -C /tmp/docker-static --strip-components=1
+          curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" \
+            -o /tmp/docker-static/docker-compose
+          chmod +x /tmp/docker-static/docker-compose
+          tar czf /tmp/docker-static.tgz -C /tmp/docker-static .
+
       - name: Pull images on runner
         run: |
           REGISTRY=ghcr.io/sandeep8756
@@ -37,12 +47,12 @@ jobs:
             docker save "$REGISTRY/$img:latest" | gzip > "/tmp/$img.tar.gz"
           done
 
-      - name: Transfer images and compose file to VM
+      - name: Transfer files to VM
         env:
           VM_IP: ${{ inputs.vm_ip }}
         run: |
           scp -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new \
-            /tmp/*.tar.gz docker-compose.ghcr.yml opc@"$VM_IP":/home/opc/
+            /tmp/docker-static.tgz /tmp/*.tar.gz docker-compose.ghcr.yml opc@"$VM_IP":/home/opc/
 
       - name: Install Docker and start services on VM
         env:
@@ -50,6 +60,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new opc@"$VM_IP" bash -s <<'REMOTE'
           set -euo pipefail
+          export PATH="/home/opc/docker:$PATH"
 
           if [ "$(free -m | awk '/^Mem:/{print $2}')" -lt 2048 ] && ! swapon --show 2>/dev/null | grep -q /swapfile; then
             echo "==> Adding 2GB swap"
@@ -60,20 +71,32 @@ jobs:
           fi
 
           if ! command -v docker &>/dev/null; then
-            echo "==> Installing Docker"
-            sudo dnf install -y docker-engine docker-compose-plugin
-            sudo systemctl enable --now docker
+            echo "==> Installing Docker static binaries"
+            mkdir -p /home/opc/docker /home/opc/docker-data
+            tar xzf /home/opc/docker-static.tgz -C /home/opc/docker
+          fi
+
+          if ! pgrep -x dockerd >/dev/null; then
+            echo "==> Starting dockerd"
+            nohup /home/opc/docker/dockerd --data-root /home/opc/docker-data > /home/opc/dockerd.log 2>&1 &
+            for i in $(seq 1 30); do
+              docker info >/dev/null 2>&1 && break
+              sleep 2
+            done
           fi
 
           echo "==> Loading images"
           for img in buildmart-materials buildmart-workers buildmart-delivery \
             buildmart-materials-bff buildmart-workers-bff buildmart-delivery-bff; do
-            gunzip -c "/home/opc/$img.tar.gz" | sudo docker load
+            echo "load $img"
+            gunzip -c "/home/opc/$img.tar.gz" | docker load
+            rm -f "/home/opc/$img.tar.gz"
+            sync
           done
 
           cd /home/opc
-          sudo docker compose -f docker-compose.ghcr.yml up -d
-          sudo docker compose -f docker-compose.ghcr.yml ps
+          docker compose -f docker-compose.ghcr.yml up -d
+          docker compose -f docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Verify BFF health on VM
@@ -82,12 +105,13 @@ jobs:
         run: |
           ssh -i ~/.ssh/vm_key -o StrictHostKeyChecking=accept-new opc@"$VM_IP" bash -s <<'REMOTE'
           set -euo pipefail
+          export PATH="/home/opc/docker:$PATH"
           for port in 8101 8102 8103; do
             echo "localhost:$port"
             curl -sf --connect-timeout 10 "http://localhost:$port/"
             echo ""
           done
-          sudo docker compose -f /home/opc/docker-compose.ghcr.yml ps
+          docker compose -f /home/opc/docker-compose.ghcr.yml ps
           REMOTE
 
       - name: Check external BFF access
